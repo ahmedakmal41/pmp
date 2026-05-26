@@ -150,23 +150,31 @@ const defaults: Partial<Record<CollectionName, Row>> = {
   MeetingActionItem: { completed: false },
 };
 
-const connectionString = process.env.DATABASE_URL;
-
-if (!connectionString?.startsWith("mongodb")) {
-  throw new Error("DATABASE_URL must be set to the Azure Cosmos DB for MongoDB connection string.");
-}
-
 const globalForCosmos = globalThis as unknown as {
   cosmosClient?: MongoClient;
   cosmosDb?: Promise<Db>;
 };
 
-const mongoClient = globalForCosmos.cosmosClient ?? new MongoClient(connectionString);
-const database = globalForCosmos.cosmosDb ?? mongoClient.connect().then((client) => client.db());
+let mongoClient = globalForCosmos.cosmosClient;
+let database = globalForCosmos.cosmosDb;
 
-if (process.env.NODE_ENV !== "production") {
-  globalForCosmos.cosmosClient = mongoClient;
-  globalForCosmos.cosmosDb = database;
+function getDatabase() {
+  if (database) return database;
+
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString?.startsWith("mongodb")) {
+    throw new Error("DATABASE_URL must be set to the Azure Cosmos DB for MongoDB connection string.");
+  }
+
+  mongoClient = new MongoClient(connectionString);
+  database = mongoClient.connect().then((client) => client.db());
+
+  if (process.env.NODE_ENV !== "production") {
+    globalForCosmos.cosmosClient = mongoClient;
+    globalForCosmos.cosmosDb = database;
+  }
+
+  return database;
 }
 
 function isRow(value: unknown): value is Row {
@@ -239,7 +247,7 @@ function toMongoFilter(whereInput: Row | undefined, collection: CollectionName):
 }
 
 async function rowsFor(collection: CollectionName, filter: Filter<Document> = {}) {
-  const db = await database;
+  const db = await getDatabase();
   return (await db.collection<StoredDocument>(collection).find(filter as Filter<StoredDocument>).toArray()).map(toRow);
 }
 
@@ -379,7 +387,7 @@ async function createRow(collection: CollectionName, input: Row, include?: Row) 
     createdAt: data.createdAt ?? now,
     updatedAt: data.updatedAt ?? now,
   };
-  const db = await database;
+  const db = await getDatabase();
   await db.collection<StoredDocument>(collection).insertOne(toDocument(row) as StoredDocument);
 
   for (const [relationName, relationInput] of nested) {
@@ -419,7 +427,7 @@ function delegate(collection: CollectionName) {
     },
     async count(args: QueryArgs = {}) {
       const filter = toMongoFilter(args.where, collection);
-      if (filter) return (await database).collection(collection).countDocuments(filter);
+      if (filter) return (await getDatabase()).collection(collection).countDocuments(filter);
       return (await this.findMany({ where: args.where })).length;
     },
     async create(args: QueryArgs): Promise<ResultRow> {
@@ -434,7 +442,7 @@ function delegate(collection: CollectionName) {
       const existing = await this.findUnique({ where: args.where });
       if (!existing) throw new Error(`${collection} not found.`);
       const data = { ...(args.data as Row), updatedAt: new Date() };
-      await (await database).collection<StoredDocument>(collection).updateOne({ _id: String(existing.id) }, { $set: data });
+      await (await getDatabase()).collection<StoredDocument>(collection).updateOne({ _id: String(existing.id) }, { $set: data });
       const row = { ...existing, ...data };
       const snapshot = await includeSnapshot(collection, [row], args.include);
       return enrich(collection, row, args.include, snapshot) as ResultRow;
@@ -442,7 +450,7 @@ function delegate(collection: CollectionName) {
     async delete(args: QueryArgs): Promise<ResultRow> {
       const existing = await this.findUnique({ where: args.where });
       if (!existing) throw new Error(`${collection} not found.`);
-      await (await database).collection<StoredDocument>(collection).deleteOne({ _id: String(existing.id) });
+      await (await getDatabase()).collection<StoredDocument>(collection).deleteOne({ _id: String(existing.id) });
       return existing;
     },
     async upsert(args: QueryArgs) {
@@ -502,7 +510,7 @@ const cosmosClient = {
   notification: delegate("Notification"),
   auditLog: delegate("AuditLog"),
   async $disconnect() {
-    await mongoClient.close();
+    await mongoClient?.close();
   },
 };
 
