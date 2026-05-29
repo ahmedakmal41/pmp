@@ -43,7 +43,7 @@ const nav = [
   { href: "/dashboard/procurement", label: "Procurement", icon: ShoppingCart, hideFor: ["CLIENT_GUEST"] },
   { href: "/dashboard/expenses", label: "Finance", icon: WalletCards, finance: true },
   { href: "/dashboard/meetings", label: "Meetings", icon: CalendarClock },
-  { href: "/dashboard/users", label: "User Administration", icon: Users, superAdminOnly: true },
+  { href: "/dashboard/users", label: "User Administration", icon: Users, adminOnly: true },
   { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
   { href: "/dashboard/auditLogs", label: "Audit Logs", icon: ShieldCheck, adminOnly: true },
 ];
@@ -61,7 +61,6 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
   const visibleNav = nav.filter((item) => {
     if (item.finance && !user.canViewFinance && user.role !== "SUPER_ADMIN") return false;
     if (item.adminOnly && !["SUPER_ADMIN", "ADMIN"].includes(user.role)) return false;
-    if (item.superAdminOnly && user.role !== "SUPER_ADMIN") return false;
     if (item.hideFor?.includes(user.role)) return false;
     return true;
   });

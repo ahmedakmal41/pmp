@@ -65,6 +65,14 @@ async function userHasLinkedRecords(id: string) {
   return counts.some((count) => count > 0);
 }
 
+async function assignsAdminRole(configKey: string, data: Record<string, unknown>) {
+  if (configKey !== "users") return false;
+  const roleId = data.roleId;
+  if (typeof roleId !== "string" || !roleId) return false;
+  const role = await prisma.role.findUnique({ where: { id: roleId }, select: { name: true } });
+  return role?.name === RoleName.ADMIN || role?.name === RoleName.SUPER_ADMIN;
+}
+
 export async function GET(request: Request, { params }: Params) {
   const { user, config } = await getContext(params);
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -114,6 +122,9 @@ export async function POST(request: Request, { params }: Params) {
     }
 
     const data = await buildWriteData(config, parsed.data, user, true);
+    if (user.role !== RoleName.SUPER_ADMIN && (await assignsAdminRole(config.key, data))) {
+      return NextResponse.json({ error: "Only super admins can create administrator accounts." }, { status: 403 });
+    }
     if (user.role !== RoleName.SUPER_ADMIN && (await assignsSuperAdmin(config, data))) {
       return NextResponse.json({ error: "Only super admins can assign projects or tasks to a super admin." }, { status: 403 });
     }
@@ -149,6 +160,9 @@ export async function PUT(request: Request, { params }: Params) {
     }
     const data = await buildWriteData(config, parsed.data, user, false);
     delete data.id;
+    if (user.role !== RoleName.SUPER_ADMIN && (await assignsAdminRole(config.key, data))) {
+      return NextResponse.json({ error: "Only super admins can assign administrator privileges." }, { status: 403 });
+    }
     if (user.role !== RoleName.SUPER_ADMIN && (await assignsSuperAdmin(config, data))) {
       return NextResponse.json({ error: "Only super admins can assign projects or tasks to a super admin." }, { status: 403 });
     }

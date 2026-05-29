@@ -42,7 +42,7 @@ export function canViewSensitiveDocuments(user: SessionUser) {
 export function canReadModule(user: SessionUser, module: ModuleKey) {
   if (module === "expenses") return canViewFinance(user);
   if (module === "auditLogs") return isAdmin(user);
-  if (module === "users") return isSuperAdmin(user);
+  if (module === "users") return isAdmin(user);
   if (module === "hr" || module === "candidates") {
     return user.role !== RoleName.CLIENT_GUEST;
   }
@@ -52,7 +52,7 @@ export function canReadModule(user: SessionUser, module: ModuleKey) {
 export function canWriteModule(user: SessionUser, module: ModuleKey) {
   if (module === "notifications" || module === "auditLogs") return false;
   if (module === "expenses") return canViewFinance(user);
-  if (module === "users") return isSuperAdmin(user);
+  if (module === "users") return isAdmin(user);
   if (module === "hr") return isAdmin(user);
   if (module === "candidates" || module === "procurement" || module === "departments") {
     return isAdmin(user) || user.role === RoleName.DEPARTMENT_HEAD;

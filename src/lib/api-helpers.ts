@@ -168,7 +168,10 @@ export function sanitizeRecord(record: Record<string, unknown>, user: SessionUse
 
 export async function getReferenceData(actor: SessionUser) {
   const [roles, users, departments, projects] = await Promise.all([
-    prisma.role.findMany({ orderBy: { label: "asc" } }),
+    prisma.role.findMany({
+      where: isSuperAdmin(actor) ? {} : { name: { notIn: [RoleName.SUPER_ADMIN, RoleName.ADMIN] } },
+      orderBy: { label: "asc" },
+    }),
     prisma.user.findMany({
       where: {
         status: "ACTIVE",
